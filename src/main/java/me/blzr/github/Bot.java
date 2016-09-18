@@ -1,5 +1,7 @@
 package me.blzr.github;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 import org.telegram.telegrambots.TelegramApiException;
 import org.telegram.telegrambots.api.methods.BotApiMethod;
@@ -9,18 +11,21 @@ import org.telegram.telegrambots.api.objects.Update;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.updateshandlers.SentCallback;
 
-import java.util.Arrays;
+import java.sql.SQLException;
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.stream.Collectors;
 
-public class GitHubBot extends TelegramLongPollingBot {
+import static me.blzr.github.Util.tryParse;
+
+public class Bot extends TelegramLongPollingBot {
+    private static final Logger log = LogManager.getLogger(Bot.class);
+
     private String botUsername;
     private String botToken;
     private Database database;
 
-    public GitHubBot(Database database, String botUsername, String botToken) {
+    public Bot(Database database, String botUsername, String botToken) {
+        log.debug("Connectiong to Telegram");
         this.database = database;
         this.botUsername = botUsername;
         this.botToken = botToken;
@@ -36,23 +41,27 @@ public class GitHubBot extends TelegramLongPollingBot {
 
     public void onUpdateReceived(Update update) {
         Message m = update.getMessage();
-        if (m == null || m.getText() == null) {
-            // Do nothing
-            return;
-        } else if (m.getText().startsWith(Commands.START)) {
-            onStart(m);
-        } else if (m.getText().startsWith(Commands.STOP)) {
-            onStop(m);
-        } else if (m.getText().startsWith(Commands.HELP)) {
-            onHelp(m);
-        } else if (m.getText().startsWith(Commands.SETTINGS)) {
-            onSettings(m);
-        } else if (m.getText().startsWith(Commands.ADD)) {
-            onAdd(m);
-        } else if (m.getText().startsWith(Commands.REMOVE)) {
-            onRemove(m);
-        } else {
-            onUnknown(m);
+        try {
+            if (m == null || m.getText() == null) {
+                // Do nothing
+                return;
+            } else if (m.getText().startsWith(Commands.START)) {
+                onStart(m);
+            } else if (m.getText().startsWith(Commands.STOP)) {
+                onStop(m);
+            } else if (m.getText().startsWith(Commands.HELP)) {
+                onHelp(m);
+            } else if (m.getText().startsWith(Commands.SETTINGS)) {
+                onSettings(m);
+            } else if (m.getText().startsWith(Commands.ADD)) {
+                onAdd(m);
+            } else if (m.getText().startsWith(Commands.REMOVE)) {
+                onRemove(m);
+            } else {
+                onUnknown(m);
+            }
+        } catch (Exception e) {
+            log.error("Cannot execute command " + m.getText(), e);
         }
     }
 
@@ -60,27 +69,29 @@ public class GitHubBot extends TelegramLongPollingBot {
         sendReply(m, "Unknown command, try /help");
     }
 
-    private void onRemove(Message m) {
-        Collection<String> repos = database.remove(tryParse(m.getText()));
+    private void onRemove(Message m) throws SQLException {
+        Collection<String> repos = database.remove(m.getChatId(), tryParse(m.getText()));
 
         String reply = "You unsubscribed from " + repos.size() + " repos";
         sendReply(m, reply);
     }
 
-    private void onAdd(Message m) {
-        Collection<String> repos = database.add(tryParse(m.getText()));
+    private void onAdd(Message m) throws SQLException {
+        Collection<String> repos = database.add(m.getChatId(), tryParse(m.getText()));
 
         String reply = "You subscribed to " + repos.size() + " repos";
         sendReply(m, reply);
     }
 
-    private void onSettings(Message m) {
+    private void onSettings(Message m) throws SQLException {
         String reply = "You subscribed to the following repos:\n" +
-                database.getSubscriptions(m.getChatId()).stream().collect(Collectors.joining("\n"));
+                database.getSubscriptions(m.getChatId()).stream()
+                        .map(repo -> "https://github.com/" + repo)
+                        .collect(Collectors.joining("\n"));
         sendReply(m, reply);
     }
 
-    private void onStop(Message m) {
+    private void onStop(Message m) throws SQLException {
         database.removeAll(m.getChatId());
         sendReply(m, "Removed all your subscriptions");
     }
@@ -122,17 +133,15 @@ public class GitHubBot extends TelegramLongPollingBot {
                 }
 
                 public void onError(BotApiMethod<Message> botApiMethod, JSONObject jsonObject) {
+                    log.error("Error in send reply {}", jsonObject);
                 }
 
                 public void onException(BotApiMethod<Message> botApiMethod, Exception e) {
+                    log.error("Exception in send reply {}", e);
                 }
             });
         } catch (TelegramApiException e) {
-            e.printStackTrace();
+            log.debug("Telegram exception", e);
         }
-    }
-
-    Set<String> tryParse(String text) {
-        return new HashSet<String>(Arrays.asList("1", "2", "3"));
     }
 }

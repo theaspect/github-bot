@@ -2,3 +2,5 @@
 target/
 *.iml
 src/main/resources/config.properties
+github.*
+db/
