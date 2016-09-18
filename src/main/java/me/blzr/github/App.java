@@ -14,16 +14,15 @@ public class App {
         Properties prop = new Properties();
         prop.load(App.class.getResourceAsStream("/config.properties"));
 
-        Database database = new Database(
-                prop.getProperty("url"),
-                prop.getProperty("user"),
-                prop.getProperty("password"));
+        // TODO Connection pool
+        Database telegramDb = new Database(prop.getProperty("url"), prop.getProperty("user"), prop.getProperty("password"));
+        Database eventsDb = new Database(prop.getProperty("url"), prop.getProperty("user"), prop.getProperty("password"));
+        Database gitHubDb = new Database(prop.getProperty("url"), prop.getProperty("user"), prop.getProperty("password"));
 
-        Repository repository = new Repository();
+        new TelegramBotsApi().registerBot(new Bot(telegramDb, prop.getProperty("username"), prop.getProperty("token")));
 
-        new TelegramBotsApi().registerBot(
-                new Bot(database,
-                    prop.getProperty("username"),
-                    prop.getProperty("token")));
+        GitHub gitHub = new GitHub();
+        new Watcher(eventsDb, gitHubDb, gitHub);
+        // TODO join to threads
     }
 }

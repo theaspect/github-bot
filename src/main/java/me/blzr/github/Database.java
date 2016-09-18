@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class Database {
+public class Database implements AutoCloseable {
     private static final Logger log = LogManager.getLogger(Database.class);
 
     private Connection connection;
@@ -28,8 +28,8 @@ public class Database {
     }
 
     List<String> getSubscriptions(Long chatId) throws SQLException {
-        return selectAll("SELECT user_id FROM SUB WHERE chat_id = ?", chatId).stream()
-                .map(row -> (String) row.get("user_id"))
+        return selectAll("SELECT org_id FROM SUB WHERE chat_id = ?", chatId).stream()
+                .map(row -> (String) row.get("org_id"))
                 .collect(Collectors.toList());
     }
 
@@ -40,44 +40,65 @@ public class Database {
     public Collection<String> add(Long chatId, Collection<String> repos) throws SQLException {
         repos.removeAll(getSubscriptions(chatId));
         for (String repo : repos) {
-            insert("INSERT INTO SUB (chat_id, user_id) VALUES (?,?)", chatId, repo);
+            insert("INSERT INTO SUB (chat_id, org_id) VALUES (?,?)", chatId, repo);
         }
         return repos;
     }
 
     public Collection<String> remove(Long chatId, Collection<String> repos) throws SQLException {
         for (String repo : repos) {
-            execute("DELETE FROM SUB WHERE chat_id = ? and user_id = ?", chatId, repo);
+            execute("DELETE FROM SUB WHERE chat_id = ? and org_id = ?", chatId, repo);
         }
         return repos;
     }
 
-    public void addSentEvent(Long eventId, String userId, String repoId, String event, Instant date, String actor) throws SQLException {
-        insert("MERGE INTO EVENT (event_id, user_id, repo_id, event, date, actor, sent)" +
-                        "KEY(event_id) " +
-                        "VALUES(?,?,?,?,?,?.?)",
-                eventId, userId, repoId, event, date, actor, true);
+    public void updateTimestamp(String orgId) throws SQLException {
+        execute("UPDATE SUB SET date = NOW() WHERE org_id = ?", orgId);
     }
 
-    public void addEvent(Long eventId, String userId, String repoId, String event, Instant date, String actor) throws SQLException {
-        insert("MERGE INTO EVENT (event_id, user_id, repo_id, event, date, actor)" +
+    public void addEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor, boolean sent) throws SQLException {
+        if (sent) {
+            addSentEvent(eventId, orgId, repoId, event, date, actor);
+        } else {
+            addNewEvent(eventId, orgId, repoId, event, date, actor);
+        }
+    }
+
+    private void addSentEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
+        insert("MERGE INTO EVENT (event_id, org_id, repo_id, event, date, actor, sent)" +
+                        "KEY(event_id) " +
+                        "VALUES(?,?,?,?,?,?,?)",
+                eventId, orgId, repoId, event, Timestamp.from(date), actor, true);
+    }
+
+    private void addNewEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
+        insert("MERGE INTO EVENT (event_id, org_id, repo_id, event, date, actor)" +
                         "KEY(event_id) " +
                         "VALUES(?,?,?,?,?,?)",
-                eventId, userId, repoId, event, date, actor);
+                eventId, orgId, repoId, event, Timestamp.from(date), actor);
+    }
+
+    public Optional<Event> getOldestUnsent() throws SQLException {
+        final Map<String, Object> row = selectOne("SELECT * FROM EVENT WHERE sent = FALSE ORDER BY date ASC");
+        return Optional.ofNullable(row == null ? null : new Event(row));
+    }
+
+    public Optional<String> getOldestNotified() throws SQLException {
+        return Optional.ofNullable((String) selectOne("SELECT org_id FROM SUB ORDER BY date ASC").get("org_id"));
+    }
+
+    public boolean hasEvents(String orgId) throws SQLException {
+        return (boolean) selectOne("SELECT COUNT(event_id)>0 has_events FROM EVENT WHERE org_id = ?", orgId).get("has_events");
+    }
+
+    public List<Long> getSubscribers(String orgId) throws SQLException {
+        return selectAll("SELECT chat_id FROM SUB WHERE org_id = ?", orgId).stream()
+                .map(row -> (Long) row.get("chat_id"))
+                .collect(Collectors.toList());
     }
 
     public void markSentEvent(Long eventId) throws SQLException {
         execute("UPDATE EVENT SET sent = TRUE WHERE event_id = ?", eventId);
-    }
-
-    public Event getOldestUnsent() throws SQLException {
-        return new Event(selectOne("SELECT * FROM EVENT WHERE sent = FALSE ORDER BY date DESC"));
-    }
-
-    public List<Long> getSubscribers(String userId) throws SQLException {
-        return selectAll("SELECT chat_id FROM SUB WHERE user_id = ?", userId).stream()
-                .map(row -> (Long) row.get("chat_id"))
-                .collect(Collectors.toList());
     }
 
     private List<Map<String, Object>> selectAll(String sql, Object... params) throws SQLException {
@@ -111,7 +132,7 @@ public class Database {
                 results = new HashMap<>();
                 final int cc = rs.getMetaData().getColumnCount();
                 for (int i = 0; i < cc; i++) {
-                    results.put(rs.getMetaData().getColumnName(i).toLowerCase(), rs.getObject(i));
+                    results.put(rs.getMetaData().getColumnName(i + 1).toLowerCase(), rs.getObject(i + 1));
                 }
             }
         }
@@ -136,9 +157,14 @@ public class Database {
         }
     }
 
+    @Override
+    public void close() throws Exception {
+        connection.close();
+    }
+
     static class Event {
         Long eventId;
-        String userId;
+        String orgId;
         String repoId;
         String event;
         Instant date;
@@ -146,7 +172,7 @@ public class Database {
 
         public Event(Map<String, Object> params) {
             this.eventId = (Long) params.get("event_id");
-            this.userId = (String) params.get("user_id");
+            this.orgId = (String) params.get("org_id");
             this.repoId = (String) params.get("repo_id");
             this.event = (String) params.get("event");
             this.date = ((Timestamp) params.get("date")).toInstant();
@@ -155,7 +181,7 @@ public class Database {
 
         @Override
         public String toString() {
-            return String.format("%s %s to http://github.com/%s/%s at %s", actor, event, userId, repoId, date);
+            return String.format("%s %s to http://github.com/%s at %s", actor, event, repoId, date);
         }
     }
 }
