@@ -5,7 +5,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.telegram.telegrambots.TelegramBotsApi;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.Properties;
 
 public class App {
@@ -14,7 +17,7 @@ public class App {
     public static void main(String[] args) throws Exception {
         log.debug("Reading properties");
         Properties prop = new Properties();
-        InputStream is = App.class.getResourceAsStream("/config.propertiess");
+        InputStream is = App.class.getResourceAsStream("/config.properties");
         if (is != null) {
             prop.load(is);
         }
@@ -24,6 +27,32 @@ public class App {
         final String password = prop.getProperty("password", System.getenv("PASSWORD"));
         final String username = prop.getProperty("username", System.getenv("USERNAME"));
         final String token = prop.getProperty("token", System.getenv("TOKEN"));
+        final String port = prop.getProperty("port", System.getenv("PORT"));
+
+        if (port != null) {
+            new Thread(() -> {
+                log.debug("Binding to {}", port);
+                try {
+                    ServerSocket srv = new ServerSocket(Integer.valueOf(port));
+                    Socket s = srv.accept();
+
+                    /*BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                    while (true) {
+                        String cominginText = "";
+                        try {
+                            cominginText = in.readLine();
+                            log.debug("Received on socket: {}", cominginText);
+                        } catch (IOException e) {
+                            log.error("Connection to server lost!", e);
+                            System.exit(1);
+                        }
+                    }*/
+                } catch (IOException e) {
+                    log.error("Cannot bind to Socket " + port, e);
+                }
+            }).start();
+        }
+
 
         Preconditions.checkNotNull(url, "URL should not be null");
         Preconditions.checkNotNull(user, "USER should not be null");

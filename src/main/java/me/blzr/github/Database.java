@@ -65,16 +65,16 @@ public class Database implements AutoCloseable {
     }
 
     private void addSentEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
-        insert("MERGE INTO EVENT (event_id, org_id, repo_id, event, date, actor, sent)" +
-                        "KEY(event_id) " +
-                        "VALUES(?,?,?,?,?,?,?)",
+        insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor, sent)" +
+                        "VALUES(?,?,?,?,?,?,?)" +
+                        "ON CONFLICT DO NOTHING",
                 eventId, orgId, repoId, event, Timestamp.from(date), actor, true);
     }
 
     private void addNewEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
-        insert("MERGE INTO EVENT (event_id, org_id, repo_id, event, date, actor)" +
-                        "KEY(event_id) " +
-                        "VALUES(?,?,?,?,?,?)",
+        insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor)" +
+                        "VALUES(?,?,?,?,?,?)" +
+                        "ON CONFLICT DO NOTHING",
                 eventId, orgId, repoId, event, Timestamp.from(date), actor);
     }
 
