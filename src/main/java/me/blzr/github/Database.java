@@ -56,26 +56,26 @@ public class Database {
         execute("UPDATE SUB SET date = NOW() WHERE org_id = ?", orgId);
     }
 
-    void addEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor, boolean sent) throws SQLException {
+    int addEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor, boolean sent) throws SQLException {
         if (sent) {
-            addSentEvent(eventId, orgId, repoId, event, date, actor);
+            return addSentEvent(eventId, orgId, repoId, event, date, actor);
         } else {
-            addNewEvent(eventId, orgId, repoId, event, date, actor);
+            return addNewEvent(eventId, orgId, repoId, event, date, actor);
         }
     }
 
-    private void addSentEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
+    private int addSentEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
         // Compatible UPSERT
-        insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor, sent)" +
-                        "SELECT ?,?,?,?,?,?,?" +
+        return insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor, sent) " +
+                        "SELECT ?,?,?,?,?,?,? " +
                         "WHERE NOT EXISTS (SELECT * FROM EVENT WHERE event_id = ?)",
                 eventId, orgId, repoId, event, Timestamp.from(date), actor, true, eventId);
     }
 
-    private void addNewEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
+    private int addNewEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
         // Compatible UPSERT
-        insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor)" +
-                        "SELECT (?,?,?,?,?,?) " +
+        return insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor) " +
+                        "SELECT ?,?,?,?,?,? " +
                         "WHERE NOT EXISTS (SELECT * FROM EVENT WHERE event_id = ?)",
                 eventId, orgId, repoId, event, Timestamp.from(date), actor, eventId);
     }
@@ -93,14 +93,24 @@ public class Database {
         return (boolean) selectOne("SELECT COUNT(event_id)>0 has_events FROM EVENT WHERE org_id = ?", orgId).get("has_events");
     }
 
-    public List<Long> getSubscribers(String orgId) throws SQLException {
+    List<Long> getSubscribers(String orgId) throws SQLException {
         return selectAll("SELECT chat_id FROM SUB WHERE org_id = ?", orgId).stream()
                 .map(row -> (Long) row.get("chat_id"))
                 .collect(Collectors.toList());
     }
 
-    public void markSentEvent(Long eventId) throws SQLException {
+    void markSentEvent(Long eventId) throws SQLException {
         execute("UPDATE EVENT SET sent = TRUE WHERE event_id = ?", eventId);
+    }
+
+    List<Stat> getStats() throws SQLException {
+        return selectAll("SELECT e.org_id org_id, COUNT(e.event_id) event_cnt, COUNT(DISTINCT s.chat_id) chat_cnt, MAX(e.date) last " +
+                "FROM event e JOIN sub s on e.org_id = s.org_id " +
+                "GROUP BY 1" +
+                "ORDER BY org_id ASC")
+                .stream()
+                .map(Stat::new)
+                .collect(Collectors.toList());
     }
 
     private List<Map<String, Object>> selectAll(String sql, Object... params) throws SQLException {
@@ -143,24 +153,44 @@ public class Database {
         }
     }
 
-    private Long execute(String sql, Object... params) throws SQLException {
+    private int execute(String sql, Object... params) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
                 ps.setObject(i + 1, params[i]);
             }
-            return (long) ps.executeUpdate();
+            return ps.executeUpdate();
 
         }
     }
 
-    private boolean insert(String sql, Object... params) throws SQLException {
+    private int insert(String sql, Object... params) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
                 ps.setObject(i + 1, params[i]);
             }
-            return ps.execute();
+            return ps.executeUpdate();
+        }
+    }
+
+    static class Stat {
+        String orgId;
+        Long subscribers;
+        Long events;
+        Instant last;
+
+        public Stat(Map<String, Object> params) {
+            this.orgId = (String) params.get("org_id");
+            this.subscribers = (Long) params.get("chat_cnt");
+            this.events = (Long) params.get("event_cnt");
+            this.last = ((Timestamp) params.get("last")).toInstant();
+        }
+
+        @Override
+        public String toString() {
+            return String.format("<TR><TD><A href='https://github.com/%s'>%s</A></TD><TD>%s</TD><TD>%s</TD><TD>%s</TD></TR>",
+                    orgId, orgId, events, subscribers, last);
         }
     }
 

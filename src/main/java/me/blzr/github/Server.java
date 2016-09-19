@@ -2,6 +2,7 @@ package me.blzr.github;
 
 import org.apache.http.ExceptionLogger;
 import org.apache.http.HttpStatus;
+import org.apache.http.entity.ContentType;
 import org.apache.http.impl.nio.bootstrap.HttpServer;
 import org.apache.http.impl.nio.bootstrap.ServerBootstrap;
 import org.apache.http.nio.entity.NStringEntity;
@@ -10,7 +11,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class Server {
     private static final Logger log = LogManager.getLogger(App.class);
@@ -25,9 +28,27 @@ public class Server {
         this.database = database;
 
         final BasicAsyncRequestHandler requestHandler = new BasicAsyncRequestHandler((httpRequest, httpResponse, httpContext) -> {
-            httpResponse.setStatusCode(HttpStatus.SC_OK);
-            // TODO add stats
-            httpResponse.setEntity(new NStringEntity("It Works!"));
+            String result;
+            try {
+                result = String.format("<H1>Server stats</H1>" +
+                                "<STYLE>" +
+                                "table, th, td {" +
+                                "  border: 1px solid black;" +
+                                "  border-collapse: collapse" +
+                                "}" +
+                                "</STYLE>" +
+                                "<TABLE>" +
+                                "  <TR><TH>Repository</TH><TH>Events</TH><TH>Subscribers</TH><TH>Latest</TH></TR>" +
+                                "  %s" +
+                                "</TABLE>",
+                        database.getStats().stream().map(Database.Stat::toString).collect(Collectors.joining()));
+                httpResponse.setStatusCode(HttpStatus.SC_OK);
+            } catch (SQLException e) {
+                log.error("Cannot get stats", e);
+                result = "Can't get stats";
+                httpResponse.setStatusCode(HttpStatus.SC_INTERNAL_SERVER_ERROR);
+            }
+            httpResponse.setEntity(new NStringEntity(result, ContentType.TEXT_HTML));
         });
 
         server = ServerBootstrap.bootstrap()

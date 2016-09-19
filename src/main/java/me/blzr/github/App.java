@@ -58,11 +58,13 @@ public class App {
     }
 
     private void start() throws Exception {
-        DataSource pool = DataSources.pooledDataSource(DataSources.unpooledDataSource(url, user, password));
-        Database database = new Database(pool);
+        final DataSource pool = DataSources.pooledDataSource(DataSources.unpooledDataSource(url, user, password));
+        final Database database = new Database(pool);
+        final Bot bot = new Bot(database, username, token);
+        final GitHub gitHub = new GitHub();
 
+        new TelegramBotsApi().registerBot(bot);
         new Server(Integer.valueOf(port), database).start();
-        new TelegramBotsApi().registerBot(new Bot(database, username, token));
-        new Watcher(database, new GitHub()).start();
+        new Watcher(database, gitHub, bot).start();
     }
 }

@@ -126,13 +126,17 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void sendReply(Message m, String message) {
-        sendReply(m, message, () -> {
+        sendReply(m.getChatId(), message);
+    }
+
+    public void sendReply(Long chatId, String message) {
+        sendReply(chatId, message, () -> {
         });
     }
 
-    private void sendReply(Message m, String message, Runnable runnable) {
+    public void sendReply(Long chatId, String message, Runnable runnable) {
         SendMessage reply = new SendMessage();
-        reply.setChatId(m.getChatId().toString());
+        reply.setChatId(chatId.toString());
         reply.setText(message);
         try {
             sendMessageAsync(reply, new SentCallback<Message>() {

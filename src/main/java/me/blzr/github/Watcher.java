@@ -14,19 +14,21 @@ public class Watcher {
 
     private final Database database;
     private final GitHub gitHub;
+    private final Bot bot;
 
-    public Watcher(Database database, GitHub gitHub) {
+    public Watcher(Database database, GitHub gitHub, Bot bot) {
         log.debug("Watcher started");
         this.database = database;
         this.gitHub = gitHub;
+        this.bot = bot;
     }
 
-    public void start() {
+    void start() {
         new ScheduledThreadPoolExecutor(1).scheduleWithFixedDelay(this::watchRepos, 0, 65, TimeUnit.SECONDS);
         new ScheduledThreadPoolExecutor(1).scheduleWithFixedDelay(this::watchEvents, 0, 5, TimeUnit.SECONDS);
     }
 
-    void watchRepos() {
+    private void watchRepos() {
         try {
             database.getOldestNotified().ifPresent(orgId -> {
                 log.debug("Request {} events", orgId);
@@ -35,8 +37,9 @@ public class Watcher {
 
                     final List<GitHub.GHEvent> events = gitHub.getEvents(orgId);
                     log.debug("Found {} events", events.size());
+                    int cnt = 0;
                     for (GitHub.GHEvent event : events) {
-                        database.addEvent(event.getId(),
+                        cnt += database.addEvent(event.getId(),
                                 orgId,
                                 event.repo.name,
                                 event.type,
@@ -44,8 +47,8 @@ public class Watcher {
                                 event.actor.login,
                                 firstRequest);
                     }
-
                     database.updateTimestamp(orgId);
+                    log.debug("Inserted {} new events", cnt);
                 } catch (IOException | SQLException e) {
                     log.error("Cannot get events from " + orgId, e);
                 }
@@ -55,13 +58,32 @@ public class Watcher {
         }
     }
 
-    void watchEvents() {
+    private void watchEvents() {
         try {
             database.getOldestUnsent().ifPresent(e -> {
-                //
+                log.debug("Found unsent event {}", e);
+                try {
+                    final List<Long> subscribers = database.getSubscribers(e.orgId);
+                    log.debug("Sending event from {} to {} subscribers", e.orgId, subscribers.size());
+                    for (Long chatId : subscribers) {
+                        bot.sendReply(chatId, e.toString());
+                        sleep(1000);
+                    }
+                    database.markSentEvent(e.eventId);
+                } catch (SQLException e1) {
+                    log.error("Cannot get subscribers " + e.orgId, e);
+                }
             });
         } catch (SQLException e) {
             log.error("Cannot get unsent events", e);
+        }
+    }
+
+    private void sleep(long delay) {
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException e1) {
+            log.error("Sleep interrupted");
         }
     }
 }
