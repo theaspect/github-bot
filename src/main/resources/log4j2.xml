@@ -13,5 +13,17 @@
             <AppenderRef ref="Console"/>
             <AppenderRef ref="LogFile"/>
         </Root>
+        <Logger name="com.mchange.v2.c3p0.impl" level="debug" >
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="LogFile"/>
+        </Logger>
+        <Logger name="com.mchange.v2.c3p0" level="debug" >
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="LogFile"/>
+        </Logger>
+        <Logger name="com.mchange.v2.resourcepool" level="debug" >
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="LogFile"/>
+        </Logger>
     </Loggers>
 </Configuration>
