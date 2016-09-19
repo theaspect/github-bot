@@ -1,48 +1,68 @@
 package me.blzr.github;
 
 import com.google.common.base.Preconditions;
+import com.mchange.v2.c3p0.DataSources;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.telegram.telegrambots.TelegramBotsApi;
 
+import javax.sql.DataSource;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
 public class App {
     private static final Logger log = LogManager.getLogger(App.class);
 
-    public static void main(String[] args) throws Exception {
-        log.debug("Reading properties");
-        Properties prop = new Properties();
-        InputStream is = App.class.getResourceAsStream("/config.properties");
-        if (is != null) {
-            prop.load(is);
+    private final String url;
+    private final String user;
+    private final String password;
+    private final String username;
+    private final String token;
+    private final String port;
+
+    public static void main(String[] args) {
+        try {
+            new App().start();
+        } catch (Exception e) {
+            log.error("Cannot start app", e);
         }
+    }
 
-        final String url = prop.getProperty("url", System.getenv("URL"));
-        final String user = prop.getProperty("user", System.getenv("USER"));
-        final String password = prop.getProperty("password", System.getenv("PASSWORD"));
-        final String username = prop.getProperty("username", System.getenv("USERNAME"));
-        final String token = prop.getProperty("token", System.getenv("TOKEN"));
-        final String port = prop.getProperty("port", System.getenv("PORT"));
+    public App() throws IOException {
+        Properties prop = getProperties();
 
-        final Server server = new Server(Integer.valueOf(port));
+        this.url = prop.getProperty("url", System.getenv("URL"));
+        this.user = prop.getProperty("user", System.getenv("USER"));
+        this.password = prop.getProperty("password", System.getenv("PASSWORD"));
+        this.username = prop.getProperty("username", System.getenv("USERNAME"));
+        this.token = prop.getProperty("token", System.getenv("TOKEN"));
+        this.port = prop.getProperty("port", System.getenv("PORT"));
 
         Preconditions.checkNotNull(url, "URL should not be null");
         Preconditions.checkNotNull(user, "USER should not be null");
         Preconditions.checkNotNull(password, "PASSWORD should not be null");
         Preconditions.checkNotNull(username, "USERNAME should not be null");
         Preconditions.checkNotNull(token, "TOKEN should not be null");
+        Preconditions.checkNotNull(port, "PORT should not be null");
+    }
 
-        // TODO Connection pool
-        Database telegramDb = new Database(url, user, password);
-        Database eventsDb = new Database(url, user, password);
-        Database gitHubDb = new Database(url, user, password);
+    private Properties getProperties() throws IOException {
+        log.debug("Reading properties");
+        Properties prop = new Properties();
+        InputStream is = App.class.getResourceAsStream("/config.properties");
+        if (is != null) {
+            prop.load(is);
+        }
+        return prop;
+    }
 
-        new TelegramBotsApi().registerBot(new Bot(telegramDb, username, token));
+    private void start() throws Exception {
+        DataSource pool = DataSources.pooledDataSource(DataSources.unpooledDataSource(url, user, password));
+        Database database = new Database(pool);
 
-        GitHub gitHub = new GitHub();
-        //new Watcher(eventsDb, gitHubDb, gitHub);
-        // TODO join to threads
+        new Server(Integer.valueOf(port), database).start();
+        new TelegramBotsApi().registerBot(new Bot(database, username, token));
+        new Watcher(database, new GitHub()).start();
     }
 }

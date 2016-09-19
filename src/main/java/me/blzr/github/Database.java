@@ -4,26 +4,26 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.flywaydb.core.Flyway;
 
+import javax.sql.DataSource;
 import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class Database implements AutoCloseable {
+public class Database {
     private static final Logger log = LogManager.getLogger(Database.class);
 
-    private Connection connection;
+    private DataSource dataSource;
 
-    public Database(String url, String user, String password) throws SQLException {
-        migrate(url, user, password);
-        log.debug("Connectiong to database");
-        this.connection = DriverManager.getConnection(url, user, password);
+    public Database(DataSource dataSource) throws SQLException {
+        this.dataSource = dataSource;
+        migrate(dataSource);
     }
 
-    void migrate(String url, String user, String password) {
+    private void migrate(DataSource dataSource) {
         log.debug("Migrating database");
         Flyway flyway = new Flyway();
-        flyway.setDataSource(url, user, password);
+        flyway.setDataSource(dataSource);
         flyway.migrate();
     }
 
@@ -37,7 +37,7 @@ public class Database implements AutoCloseable {
         execute("DELETE FROM SUB WHERE chat_id = ?", chatId);
     }
 
-    public Collection<String> add(Long chatId, Collection<String> repos) throws SQLException {
+    Collection<String> add(Long chatId, Collection<String> repos) throws SQLException {
         repos.removeAll(getSubscriptions(chatId));
         for (String repo : repos) {
             insert("INSERT INTO SUB (chat_id, org_id) VALUES (?,?)", chatId, repo);
@@ -45,18 +45,18 @@ public class Database implements AutoCloseable {
         return repos;
     }
 
-    public Collection<String> remove(Long chatId, Collection<String> repos) throws SQLException {
+    Collection<String> remove(Long chatId, Collection<String> repos) throws SQLException {
         for (String repo : repos) {
             execute("DELETE FROM SUB WHERE chat_id = ? and org_id = ?", chatId, repo);
         }
         return repos;
     }
 
-    public void updateTimestamp(String orgId) throws SQLException {
+    void updateTimestamp(String orgId) throws SQLException {
         execute("UPDATE SUB SET date = NOW() WHERE org_id = ?", orgId);
     }
 
-    public void addEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor, boolean sent) throws SQLException {
+    void addEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor, boolean sent) throws SQLException {
         if (sent) {
             addSentEvent(eventId, orgId, repoId, event, date, actor);
         } else {
@@ -65,29 +65,31 @@ public class Database implements AutoCloseable {
     }
 
     private void addSentEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
+        // Compatible UPSERT
         insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor, sent)" +
-                        "VALUES(?,?,?,?,?,?,?)" +
-                        "ON CONFLICT DO NOTHING",
-                eventId, orgId, repoId, event, Timestamp.from(date), actor, true);
+                        "SELECT ?,?,?,?,?,?,?" +
+                        "WHERE NOT EXISTS (SELECT * FROM EVENT WHERE event_id = ?)",
+                eventId, orgId, repoId, event, Timestamp.from(date), actor, true, eventId);
     }
 
     private void addNewEvent(Long eventId, String orgId, String repoId, String event, Instant date, String actor) throws SQLException {
+        // Compatible UPSERT
         insert("INSERT INTO EVENT (event_id, org_id, repo_id, event, date, actor)" +
-                        "VALUES(?,?,?,?,?,?)" +
-                        "ON CONFLICT DO NOTHING",
-                eventId, orgId, repoId, event, Timestamp.from(date), actor);
+                        "SELECT (?,?,?,?,?,?) " +
+                        "WHERE NOT EXISTS (SELECT * FROM EVENT WHERE event_id = ?)",
+                eventId, orgId, repoId, event, Timestamp.from(date), actor, eventId);
     }
 
-    public Optional<Event> getOldestUnsent() throws SQLException {
+    Optional<Event> getOldestUnsent() throws SQLException {
         final Map<String, Object> row = selectOne("SELECT * FROM EVENT WHERE sent = FALSE ORDER BY date ASC");
         return Optional.ofNullable(row == null ? null : new Event(row));
     }
 
-    public Optional<String> getOldestNotified() throws SQLException {
+    Optional<String> getOldestNotified() throws SQLException {
         return Optional.ofNullable((String) selectOne("SELECT org_id FROM SUB ORDER BY date ASC").get("org_id"));
     }
 
-    public boolean hasEvents(String orgId) throws SQLException {
+    boolean hasEvents(String orgId) throws SQLException {
         return (boolean) selectOne("SELECT COUNT(event_id)>0 has_events FROM EVENT WHERE org_id = ?", orgId).get("has_events");
     }
 
@@ -102,8 +104,9 @@ public class Database implements AutoCloseable {
     }
 
     private List<Map<String, Object>> selectAll(String sql, Object... params) throws SQLException {
-        List<Map<String, Object>> results;
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
+            List<Map<String, Object>> results;
             for (int i = 0; i < params.length; i++) {
                 ps.setObject(i + 1, params[i]);
             }
@@ -117,13 +120,14 @@ public class Database implements AutoCloseable {
                 }
                 results.add(row);
             }
+            return results;
         }
-        return results;
     }
 
     private Map<String, Object> selectOne(String sql, Object... params) throws SQLException {
-        Map<String, Object> results = null;
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
+            Map<String, Object> results = null;
             for (int i = 0; i < params.length; i++) {
                 ps.setObject(i + 1, params[i]);
             }
@@ -135,31 +139,29 @@ public class Database implements AutoCloseable {
                     results.put(rs.getMetaData().getColumnName(i + 1).toLowerCase(), rs.getObject(i + 1));
                 }
             }
+            return results;
         }
-        return results;
     }
 
     private Long execute(String sql, Object... params) throws SQLException {
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
                 ps.setObject(i + 1, params[i]);
             }
             return (long) ps.executeUpdate();
+
         }
     }
 
     private boolean insert(String sql, Object... params) throws SQLException {
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
                 ps.setObject(i + 1, params[i]);
             }
             return ps.execute();
         }
-    }
-
-    @Override
-    public void close() throws Exception {
-        connection.close();
     }
 
     static class Event {

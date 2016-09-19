@@ -66,10 +66,14 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void onUnknown(Message m) {
+        log.debug("Unknown request from {}: {}", m.getChatId(), m.getText());
+
         sendReply(m, "Unknown command, try /help");
     }
 
     private void onRemove(Message m) throws SQLException {
+        log.debug("Remove request from {}: {}", m.getChatId(), m.getText());
+
         Collection<String> repos = database.remove(m.getChatId(), tryParse(m.getText()));
 
         String reply = "You unsubscribed from " + repos.size() + " repos";
@@ -77,6 +81,8 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void onAdd(Message m) throws SQLException {
+        log.debug("/add request from {}: {}", m.getChatId(), m.getText());
+
         Collection<String> repos = database.add(m.getChatId(), tryParse(m.getText()));
 
         String reply = "You subscribed to " + repos.size() + " repos";
@@ -84,6 +90,8 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void onSettings(Message m) throws SQLException {
+        log.debug("/settings request from {}: {}", m.getChatId(), m.getText());
+
         String reply = "You subscribed to the following repos:\n" +
                 database.getSubscriptions(m.getChatId()).stream()
                         .map(repo -> "https://github.com/" + repo)
@@ -92,11 +100,13 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void onStop(Message m) throws SQLException {
+        log.debug("/stop request from {}: {}", m.getChatId(), m.getText());
         database.removeAll(m.getChatId());
         sendReply(m, "Removed all your subscriptions");
     }
 
     private void onHelp(Message m) {
+        log.debug("/help request from {}: {}", m.getChatId(), m.getText());
         sendReply(m,
                 "Bot understand following commands\n" +
                         "/help – shows this help\n" +
@@ -107,6 +117,7 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void onStart(Message m) {
+        log.debug("/start request from {}: {}", m.getChatId(), m.getText());
         sendReply(m,
                 "This is GitHub bot\n" +
                         "which sends you notifications\n" +
@@ -114,12 +125,12 @@ public class Bot extends TelegramLongPollingBot {
                         "Try /help to see available commands");
     }
 
-    void sendReply(Message m, String message) {
+    private void sendReply(Message m, String message) {
         sendReply(m, message, () -> {
         });
     }
 
-    void sendReply(Message m, String message, Runnable runnable) {
+    private void sendReply(Message m, String message, Runnable runnable) {
         SendMessage reply = new SendMessage();
         reply.setChatId(m.getChatId().toString());
         reply.setText(message);

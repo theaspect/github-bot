@@ -5,36 +5,38 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class Watcher {
     private static final Logger log = LogManager.getLogger(Watcher.class);
 
-    private final Database eventsDb;
-    private final Database gitHubDb;
+    private final Database database;
     private final GitHub gitHub;
 
-    public Watcher(Database eventsDb, Database gitHubDb, GitHub gitHub) {
+    public Watcher(Database database, GitHub gitHub) {
         log.debug("Watcher started");
-        this.eventsDb = eventsDb;
-        this.gitHubDb = gitHubDb;
+        this.database = database;
         this.gitHub = gitHub;
+    }
 
-        new ScheduledThreadPoolExecutor(1).scheduleWithFixedDelay(this::watchRepos, 0, 60, TimeUnit.SECONDS);
-        //new ScheduledThreadPoolExecutor(1).scheduleWithFixedDelay(this::watchEvents, 0, 1, TimeUnit.SECONDS);
+    public void start() {
+        new ScheduledThreadPoolExecutor(1).scheduleWithFixedDelay(this::watchRepos, 0, 65, TimeUnit.SECONDS);
+        new ScheduledThreadPoolExecutor(1).scheduleWithFixedDelay(this::watchEvents, 0, 5, TimeUnit.SECONDS);
     }
 
     void watchRepos() {
-        log.debug("Check subscriptions");
         try {
-            gitHubDb.getOldestNotified().ifPresent(orgId -> {
+            database.getOldestNotified().ifPresent(orgId -> {
                 log.debug("Request {} events", orgId);
                 try {
-                    boolean firstRequest = !gitHubDb.hasEvents(orgId);
+                    boolean firstRequest = !database.hasEvents(orgId);
 
-                    for (GitHub.GHEvent event : gitHub.getEvents(orgId)) {
-                        gitHubDb.addEvent(event.getId(),
+                    final List<GitHub.GHEvent> events = gitHub.getEvents(orgId);
+                    log.debug("Found {} events", events.size());
+                    for (GitHub.GHEvent event : events) {
+                        database.addEvent(event.getId(),
                                 orgId,
                                 event.repo.name,
                                 event.type,
@@ -43,9 +45,9 @@ public class Watcher {
                                 firstRequest);
                     }
 
-                    gitHubDb.updateTimestamp(orgId);
+                    database.updateTimestamp(orgId);
                 } catch (IOException | SQLException e) {
-                    log.error("Cannot get events", e);
+                    log.error("Cannot get events from " + orgId, e);
                 }
             });
         } catch (SQLException e) {
@@ -55,7 +57,7 @@ public class Watcher {
 
     void watchEvents() {
         try {
-            eventsDb.getOldestUnsent().ifPresent(e -> {
+            database.getOldestUnsent().ifPresent(e -> {
                 //
             });
         } catch (SQLException e) {

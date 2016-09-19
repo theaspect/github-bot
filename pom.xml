@@ -28,6 +28,16 @@
           <version>v2.3.5</version>
       </dependency>
       <dependency>
+          <groupId>com.google.code.gson</groupId>
+          <artifactId>gson</artifactId>
+          <version>2.7</version>
+      </dependency>
+      <dependency>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+          <version>19.0</version>
+      </dependency>
+      <dependency>
           <groupId>org.apache.httpcomponents</groupId>
           <artifactId>httpclient</artifactId>
           <version>4.5.2</version>
@@ -41,16 +51,6 @@
           <groupId>org.apache.httpcomponents</groupId>
           <artifactId>httpcore-nio</artifactId>
           <version>4.4.5</version>
-      </dependency>
-      <dependency>
-          <groupId>com.google.code.gson</groupId>
-          <artifactId>gson</artifactId>
-          <version>2.7</version>
-      </dependency>
-      <dependency>
-          <groupId>org.flywaydb</groupId>
-          <artifactId>flyway-core</artifactId>
-          <version>4.0.3</version>
       </dependency>
       <dependency>
           <groupId>org.apache.logging.log4j</groupId>
@@ -68,14 +68,19 @@
           <version>1.4.192</version>
       </dependency>
       <dependency>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-          <version>19.0</version>
-      </dependency>
-      <dependency>
           <groupId>org.postgresql</groupId>
           <artifactId>postgresql</artifactId>
           <version>9.4.1208</version>
+      </dependency>
+      <dependency>
+          <groupId>org.flywaydb</groupId>
+          <artifactId>flyway-core</artifactId>
+          <version>4.0.3</version>
+      </dependency>
+      <dependency>
+          <groupId>c3p0</groupId>
+          <artifactId>c3p0</artifactId>
+          <version>0.9.1.2</version>
       </dependency>
       <dependency>
           <groupId>junit</groupId>

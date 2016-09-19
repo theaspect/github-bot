@@ -15,20 +15,31 @@ import java.util.concurrent.TimeUnit;
 public class Server {
     private static final Logger log = LogManager.getLogger(App.class);
 
-    public Server(int port) throws IOException {
-        log.debug("Starting server on {}", port);
+    private final int port;
+    private final Database database;
+
+    private final HttpServer server;
+
+    public Server(int port, Database database) {
+        this.port = port;
+        this.database = database;
 
         final BasicAsyncRequestHandler requestHandler = new BasicAsyncRequestHandler((httpRequest, httpResponse, httpContext) -> {
             httpResponse.setStatusCode(HttpStatus.SC_OK);
+            // TODO add stats
             httpResponse.setEntity(new NStringEntity("It Works!"));
         });
 
-        final HttpServer server = ServerBootstrap.bootstrap()
+        server = ServerBootstrap.bootstrap()
                 .setListenerPort(port)
                 .setServerInfo("GitHubBot/1.0")
                 .setExceptionLogger(ExceptionLogger.STD_ERR)
                 .registerHandler("*", requestHandler)
                 .create();
+    }
+
+    public void start() throws IOException {
+        log.debug("Starting server on {}", port);
 
         server.start();
 
