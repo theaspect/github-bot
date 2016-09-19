@@ -104,9 +104,9 @@ public class Database {
     }
 
     List<Stat> getStats() throws SQLException {
-        return selectAll("SELECT e.org_id org_id, COUNT(e.event_id) event_cnt, COUNT(DISTINCT s.chat_id) chat_cnt, MAX(e.date) last " +
+        return selectAll("SELECT e.org_id org_id, COUNT(e.event_id) event_cnt, COUNT(DISTINCT s.chat_id) chat_cnt, MAX(e.date) latest " +
                 "FROM event e JOIN sub s on e.org_id = s.org_id " +
-                "GROUP BY 1" +
+                "GROUP BY 1 " +
                 "ORDER BY org_id ASC")
                 .stream()
                 .map(Stat::new)
@@ -178,19 +178,19 @@ public class Database {
         String orgId;
         Long subscribers;
         Long events;
-        Instant last;
+        Instant latest;
 
         public Stat(Map<String, Object> params) {
             this.orgId = (String) params.get("org_id");
             this.subscribers = (Long) params.get("chat_cnt");
             this.events = (Long) params.get("event_cnt");
-            this.last = ((Timestamp) params.get("last")).toInstant();
+            this.latest = ((Timestamp) params.get("latest")).toInstant();
         }
 
         @Override
         public String toString() {
             return String.format("<TR><TD><A href='https://github.com/%s'>%s</A></TD><TD>%s</TD><TD>%s</TD><TD>%s</TD></TR>",
-                    orgId, orgId, events, subscribers, last);
+                    orgId, orgId, events, subscribers, latest);
         }
     }
 
@@ -207,7 +207,7 @@ public class Database {
             this.orgId = (String) params.get("org_id");
             this.repoId = (String) params.get("repo_id");
             this.event = (String) params.get("event");
-            this.date = ((Timestamp) params.get("date")).toInstant();
+            this.date = ((Timestamp) params.get("latest")).toInstant();
             this.actor = (String) params.get("actor");
         }
 
