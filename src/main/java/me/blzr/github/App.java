@@ -5,10 +5,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.telegram.telegrambots.TelegramBotsApi;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.Properties;
 
 public class App {
@@ -29,30 +26,7 @@ public class App {
         final String token = prop.getProperty("token", System.getenv("TOKEN"));
         final String port = prop.getProperty("port", System.getenv("PORT"));
 
-        if (port != null) {
-            new Thread(() -> {
-                log.debug("Binding to {}", port);
-                try {
-                    ServerSocket srv = new ServerSocket(Integer.valueOf(port));
-                    Socket s = srv.accept();
-
-                    /*BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
-                    while (true) {
-                        String cominginText = "";
-                        try {
-                            cominginText = in.readLine();
-                            log.debug("Received on socket: {}", cominginText);
-                        } catch (IOException e) {
-                            log.error("Connection to server lost!", e);
-                            System.exit(1);
-                        }
-                    }*/
-                } catch (IOException e) {
-                    log.error("Cannot bind to Socket " + port, e);
-                }
-            }).start();
-        }
-
+        final Server server = new Server(Integer.valueOf(port));
 
         Preconditions.checkNotNull(url, "URL should not be null");
         Preconditions.checkNotNull(user, "USER should not be null");
@@ -68,7 +42,7 @@ public class App {
         new TelegramBotsApi().registerBot(new Bot(telegramDb, username, token));
 
         GitHub gitHub = new GitHub();
-        new Watcher(eventsDb, gitHubDb, gitHub);
+        //new Watcher(eventsDb, gitHubDb, gitHub);
         // TODO join to threads
     }
 }
