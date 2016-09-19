@@ -105,7 +105,7 @@ public class Database {
 
     List<Stat> getStats() throws SQLException {
         return selectAll("SELECT e.org_id org_id, COUNT(e.event_id) event_cnt, COUNT(DISTINCT s.chat_id) chat_cnt, MAX(e.date) latest " +
-                "FROM event e JOIN sub s on e.org_id = s.org_id " +
+                "FROM sub s LEFT JOIN event e on e.org_id = s.org_id " +
                 "GROUP BY 1 " +
                 "ORDER BY org_id ASC")
                 .stream()
@@ -184,7 +184,8 @@ public class Database {
             this.orgId = (String) params.get("org_id");
             this.subscribers = (Long) params.get("chat_cnt");
             this.events = (Long) params.get("event_cnt");
-            this.latest = ((Timestamp) params.get("latest")).toInstant();
+            Timestamp ts = (Timestamp) params.get("latest");
+            this.latest = (ts == null) ? null : ts.toInstant();
         }
 
         @Override
