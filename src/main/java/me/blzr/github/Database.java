@@ -106,7 +106,7 @@ public class Database {
     }
 
     List<Stat> getStats() throws SQLException {
-        return selectAll("SELECT e.org_id org_id, COUNT(e.event_id) event_cnt, COUNT(DISTINCT s.chat_id) chat_cnt, MAX(e.date) latest " +
+        return selectAll("SELECT s.org_id org_id, COUNT(e.event_id) event_cnt, COUNT(DISTINCT s.chat_id) chat_cnt, MAX(e.date) latest " +
                 "FROM sub s LEFT JOIN event e on e.org_id = s.org_id " +
                 "GROUP BY 1 " +
                 "ORDER BY org_id ASC")
