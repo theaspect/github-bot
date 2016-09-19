@@ -7,6 +7,8 @@ import org.flywaydb.core.Flyway;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -82,7 +84,7 @@ public class Database {
 
     Optional<Event> getOldestUnsent() throws SQLException {
         final Map<String, Object> row = selectOne("SELECT * FROM EVENT WHERE sent = FALSE ORDER BY date ASC");
-        return Optional.ofNullable(row == null ? null : new Event(row));
+        return Optional.ofNullable(row).map(Event::new);
     }
 
     Optional<String> getOldestNotified() throws SQLException {
@@ -191,7 +193,7 @@ public class Database {
         @Override
         public String toString() {
             return String.format("<TR><TD><A href='https://github.com/%s'>%s</A></TD><TD>%s</TD><TD>%s</TD><TD>%s</TD></TR>",
-                    orgId, orgId, events, subscribers, latest);
+                    orgId, orgId, events, subscribers, (latest == null) ? "" : latest.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         }
     }
 
@@ -208,13 +210,15 @@ public class Database {
             this.orgId = (String) params.get("org_id");
             this.repoId = (String) params.get("repo_id");
             this.event = (String) params.get("event");
-            this.date = ((Timestamp) params.get("latest")).toInstant();
+            Timestamp date = (Timestamp) params.get("date");
+            this.date = (date == null) ? null : date.toInstant();
             this.actor = (String) params.get("actor");
         }
 
         @Override
         public String toString() {
-            return String.format("%s %s to http://github.com/%s at %s", actor, event, repoId, date);
+            return String.format("%s %s to http://github.com/%s at %s", actor, event, repoId,
+                    (date == null) ? "" : date.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         }
     }
 }
