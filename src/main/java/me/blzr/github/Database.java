@@ -30,7 +30,7 @@ public class Database {
     }
 
     List<String> getSubscriptions(Long chatId) throws SQLException {
-        return selectAll("SELECT org_id FROM SUB WHERE chat_id = ?", chatId).stream()
+        return selectAll("SELECT org_id FROM SUB WHERE chat_id = ? ORDER BY org_id ASC", chatId).stream()
                 .map(row -> (String) row.get("org_id"))
                 .collect(Collectors.toList());
     }
